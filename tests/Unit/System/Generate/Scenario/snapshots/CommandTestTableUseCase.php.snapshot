@@ -1,0 +1,44 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Domain\Test\UseCase;
+
+use App\Domain\Test\Entity\TestTable;
+use Database\ORM\Attribute\Loader;
+use Database\ORM\CommandRepositoryInterface;
+
+class CommandTestTableUseCase
+{
+	public function __construct(
+		/** @var CommandRepositoryInterface<TestTable> */
+		private CommandRepositoryInterface $repository,
+	) {
+	}
+
+
+	public function create(): TestTable
+	{
+		$entity = new TestTable(id: Loader::ID_FOR_INSERT,
+		id: 0,
+		email: '',
+		name: '');
+		return $this->repository->create($entity);
+	}
+
+
+	public function update(int $id): TestTable
+	{
+		$entity = new TestTable(id: $id,
+		id: 0,
+		email: '',
+		name: '');
+		return $this->repository->update($entity);
+	}
+
+
+	public function delete(int $id): void
+	{
+		$this->repository->delete($id);
+	}
+}

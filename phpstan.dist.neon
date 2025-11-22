@@ -1,0 +1,19 @@
+includes:
+    - vendor/cuyz/valinor/qa/PHPStan/valinor-phpstan-configuration.php
+parameters:
+    level: 9
+    paths:
+        - bin/
+        - config/
+        - public/
+        - src/
+    ignoreErrors:
+        - "#does not have the parameter target#"
+        - "#no value type specified in iterable type array#"
+        - "#Call to an undefined method Illuminate#"
+        -
+            message: '#Property (.*) is never read, only written\.#'
+            path: */Entity/*.php
+    excludePaths:
+    		- */Fake*.php
+    		- src/System/Command/DbUsageReport.php

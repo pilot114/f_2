@@ -1,0 +1,18 @@
+#!/bin/sh
+#
+echo committing as $(git config user.name)
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+NC='\033[0m'
+
+COMMIT_MESSAGE=$(cat "$1")
+
+PATTERN='^(feat|fix|docs|style|refactor|perf|test)\([A-Z]+-[0-9]+\): .*|^(chore|build|ci|revert).*?: .*|Merge branch.*|Revert.*'
+
+if ! echo "$COMMIT_MESSAGE" | grep -qE "$PATTERN"; then
+    echo "${RED}❌ Ошибка: Сообщение коммита '$COMMIT_MESSAGE' должно соответствовать формату: feat(CP-123): сообщение${NC}"
+    exit 1
+fi
+
+exit 0

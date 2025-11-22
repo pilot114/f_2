@@ -1,0 +1,45 @@
+#!/bin/sh
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+NC='\033[0m'
+
+COMMIT_MESSAGE=$(git log -1 --pretty=%B)
+PATTERN='^(feat|fix|docs|style|refactor|perf|test)\([A-Z]+-[0-9]+\): .*|^(chore|build|ci|revert).*?: .*|Merge branch.*|Revert.*'
+
+if ! echo "$COMMIT_MESSAGE" | grep -qE "$PATTERN"; then
+    echo "${RED}❌ Проверьте свои коммиты, сообщение коммита должно соответствовать формату: feat(CP-123): message in English${NC}"
+    exit 1
+fi
+
+mkdir -p var/lint
+START=$(date +%s)
+
+echo "${YELLOW}🔍 Запуск полных проверок перед push...${NC}"
+
+# Только проверки, БЕЗ автофиксов
+(composer rector-lint; echo $? > "var/lint/rector") &
+(composer ecs-lint; echo $? > "var/lint/ecs") &
+(composer phpstan-lint; echo $? > "var/lint/phpstan") &
+(composer test; echo $? > "var/lint/test")
+wait
+
+END=$(date +%s)
+ALL_DIFF=$(( $END - $START ))
+
+RECTOR_EXIT_CODE=$(cat "var/lint/rector")
+ECS_EXIT_CODE=$(cat "var/lint/ecs")
+PHPSTAN_EXIT_CODE=$(cat "var/lint/phpstan")
+TEST_EXIT_CODE=$(cat "var/lint/test")
+
+rm -rf "./var/lint/"
+
+if [ $RECTOR_EXIT_CODE -ne 0 ] || [ $ECS_EXIT_CODE -ne 0 ] || [ $PHPSTAN_EXIT_CODE -ne 0 ] || [ $TEST_EXIT_CODE -ne 0 ]; then
+    echo "${RED}🚫 Проверки не прошли${NC}"
+    exit 1
+fi
+
+echo "ALL took $ALL_DIFF seconds"
+echo "${GREEN}✅ Все проверки пройдены!${NC}"
+exit 0

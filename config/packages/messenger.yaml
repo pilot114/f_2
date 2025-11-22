@@ -1,0 +1,18 @@
+framework:
+    messenger:
+        transports:
+            reporter_export:
+                dsn: '%env(MESSENGER_TRANSPORT_DSN)%'
+                options:
+                    stream: 'reporter_export'
+                    group: 'workers'
+                    auto_setup: true
+                    delete_after_ack: true
+
+        routing:
+            'App\Domain\Dit\Reporter\Message\ExportReportMessage': reporter_export
+
+        buses:
+            messenger.bus.default:
+                middleware:
+                    - App\System\ReconnectMiddleware

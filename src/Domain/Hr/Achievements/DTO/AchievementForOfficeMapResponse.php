@@ -1,0 +1,23 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Domain\Hr\Achievements\DTO;
+
+use DateTimeImmutable;
+
+readonly class AchievementForOfficeMapResponse
+{
+    /**
+     * @param DateTimeImmutable[] $received
+     */
+    public function __construct(
+        public int $id,
+        public string $name,
+        public string $description,
+        public ImageResponse $image,
+        public int $userCount,
+        public array $received,
+    ) {
+    }
+}

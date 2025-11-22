@@ -1,0 +1,156 @@
+parameters:
+    db.log_type: '%env(enum:Database\Connection\Logger\LogType:DB_LOG_TYPE)%'
+    db.log_file_path: '%kernel.logs_dir%/sql.log'
+    db.user: '%env(DB_USER)%'
+    db.password: '%env(DB_PASS)%'
+    db.is_prod: '%env(bool:DB_IS_PROD)%'
+    skip_auth: '%env(bool:SKIP_AUTH)%'
+    jira.host: '%env(JIRA_HOST)%'
+    jira.user: '%env(JIRA_USER)%'
+    jira.password: '%env(JIRA_PASSWORD)%'
+    jira.use_v3_rest_api: '%env(bool:JIRA_USE_V3_REST_API)%'
+
+services:
+    _defaults:
+        autowire: true
+        autoconfigure: true
+
+    # переопределения для вендорных сервисов
+    http_kernel:
+      class: App\System\CustomHttpKernel
+      public: true
+      arguments:
+        $dispatcher: '@event_dispatcher'
+        $resolver: '@controller_resolver'
+        $env: '%env(APP_ENV)%'
+    db_logger:
+      class: 'Psr\Log\LoggerInterface'
+      factory: [ '@App\System\Factory\DbLoggerFactory', build ]
+      arguments:
+        $type: '%db.log_type%'
+        $filePath: '%db.log_file_path%'
+    sentry.callback.set_user:
+      class: 'App\System\SentryUserResolver'
+    Sentry\Integration\RequestIntegration:
+      arguments:
+        $requestFetcher: null
+        # https://github.com/getsentry/sentry-symfony/issues/818
+    Symfony\Component\Finder\Finder:
+      shared: false
+    Symfony\Component\DependencyInjection\Container: '@service_container'
+    Symfony\Component\HttpKernel\Controller\ArgumentResolverInterface: '@App\System\RPC\DTO\RpcArgumentResolver'
+    Symfony\Contracts\HttpClient\HttpClientInterface: '@http_client'
+    Symfony\Component\PropertyInfo\Extractor\PhpStanExtractor: ~
+    Symfony\Component\HttpFoundation\Request:
+      class: 'Symfony\Component\HttpFoundation\Request'
+      factory: [ '@App\System\Factory\RequestFactory', create ]
+    Doctrine\SqlFormatter\SqlFormatter: ~
+    JiraRestApi\Configuration\ArrayConfiguration:
+      factory: ['@App\System\Factory\JiraConfigurationFactory', 'create']
+    JiraRestApi\Issue\IssueService:
+      arguments:
+        $configuration: '@JiraRestApi\Configuration\ArrayConfiguration'
+
+    Database\Connection\CpConfig:
+      class: Database\Connection\CpConfig
+      factory: [ '@App\System\Factory\CpConfigFactory', get ]
+      arguments:
+        $user: '%db.user%'
+        $password: '%db.password%'
+        $isProd: '%db.is_prod%'
+    Database\Connection\CpConnection:
+      arguments:
+        $logger: '@db_logger'
+      lazy: true
+      public: true
+    Database\Schema\EntityRetriever:
+      class: Database\Schema\EntityRetriever
+      factory: [ '@App\System\Factory\EntityRetrieverFactory', get ]
+    Database\ORM\DataMapper: ~
+    Database\Connection\ReadDatabaseInterface: '@Database\Connection\CpConnection'
+    Database\Connection\WriteDatabaseInterface: '@Database\Connection\CpConnection'
+    Database\Connection\TransactionInterface: '@Database\Connection\CpConnection'
+    Database\ORM\DataMapperInterface: '@Database\ORM\DataMapper'
+
+    App\System\McpServer:
+      arguments:
+        $tmpDir: '%kernel.cache_dir%'
+        $projectDir: '%kernel.project_dir%'
+        $env: '%env(APP_ENV)%'
+    App\System\RefreshGenericsService:
+      arguments:
+        $projectDir: '%kernel.project_dir%'
+    App\System\Command\Generate:
+      arguments:
+        $projectDir: '%kernel.project_dir%'
+    App\System\RPC\RpcServer:
+      arguments:
+        $argumentResolver: '@Symfony\Component\HttpKernel\Controller\ArgumentResolverInterface'
+        $resolver: '@controller_resolver'
+        $env: '%env(APP_ENV)%'
+    App\System\RPC\Attribute\RpcMethodLoader:
+      arguments:
+        $env: '%env(APP_ENV)%'
+    App\System\Security\Attribute\CpActionLoader:
+      arguments:
+        $env: '%env(APP_ENV)%'
+    App\System\Security\Attribute\CpMenuLoader:
+      arguments:
+        $env: '%env(APP_ENV)%'
+    App\System\Security\JWT:
+      arguments:
+        $secret: '%env(APP_SECRET)%'
+    App\System\Security\AuthUserChecker:
+      arguments:
+        $skipAuth: '%skip_auth%'
+    App\System\SystemEventListener:
+      arguments:
+        $env: '%env(APP_ENV)%'
+    App\System\Factory\JiraConfigurationFactory:
+      arguments:
+        $jiraHost: '%jira.host%'
+        $jiraUser: '%jira.user%'
+        $jiraPassword: '%jira.password%'
+        $useV3RestApi: '%jira.use_v3_rest_api%'
+
+    App\Common\Service\Integration\JiraClient:
+      arguments:
+        $issueService: '@JiraRestApi\Issue\IssueService'
+    App\System\DomainSourceCodeFinder:
+        arguments:
+            $projectDir: '%kernel.project_dir%'
+    App\Common\Service\Integration\StaticClient:
+        arguments:
+            $url: '%env(FILE_CLIENT_URL)%'
+            $secret: '%env(FILE_CLIENT_SECRET)%'
+    App\Common\Service\Integration\RpcClient:
+        arguments:
+            $client: '@http_client'
+            $request: '@Symfony\Component\HttpFoundation\Request'
+
+    App\Domain\:
+      resource: '%kernel.project_dir%/src/Domain/*/*/Controller'
+      tags: [ 'controller.service_arguments' ]
+      public: true
+    App\Domain\Portal\Security\Entity\SecurityUser:
+      factory: [ '@security.helper', getUser ]
+      public: true
+    App\Domain\Portal\Security\Controller\CheckAccessController:
+        public: true
+        arguments:
+            $skipAuth: '%skip_auth%'
+    App\Domain\Portal\Files\Controller\FileWriteController:
+      arguments:
+        $tmpDir: '%kernel.cache_dir%'
+    App\Domain\Portal\System\Controller\IsTestDbController:
+      public: true
+      arguments:
+        $isProd: '%db.is_prod%'
+    App\Domain\Analytics\Mcp\UseCase\FillDataUseCase:
+        public: true
+        arguments:
+            $dbIsProd: '%db.is_prod%'
+
+imports:
+    - { resource: generics.yaml }
+    - { resource: excel.yaml }

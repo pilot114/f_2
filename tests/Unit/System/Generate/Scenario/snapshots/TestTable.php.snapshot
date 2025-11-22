@@ -1,0 +1,30 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Domain\Test\Entity;
+
+use Database\ORM\Attribute\Column;
+use Database\ORM\Attribute\Entity;
+use DateTimeImmutable;
+
+#[Entity(name: 'TEST_TABLE')]
+class TestTable
+{
+	public function __construct(
+		#[Column(name: 'ID')]
+		private int $id,
+		#[Column(name: 'NAME')]
+		private ?string $name = null,
+	) {
+	}
+
+
+	public function toArray(): array
+	{
+		return [
+		'id' => $this->id,
+		'name' => $this->name
+		];
+	}
+}

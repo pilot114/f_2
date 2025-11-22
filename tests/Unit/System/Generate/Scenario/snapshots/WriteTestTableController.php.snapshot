@@ -1,0 +1,39 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Domain\Test\Controller;
+
+use App\Common\Attribute\RpcMethod;
+use App\Domain\Test\UseCase\CommandTestTableUseCase;
+
+class WriteTestTableController
+{
+	public function __construct(
+		private CommandTestTableUseCase $useCase,
+	) {
+	}
+
+
+	#[RpcMethod('test.createTestTable', 'Создание TestTable')]
+	public function create(): array
+	{
+		$entity = $this->useCase->create();
+		return $entity->toArray();
+	}
+
+
+	#[RpcMethod('test.updateTestTable', 'Обновление TestTable')]
+	public function update(): array
+	{
+		$entity = $this->useCase->update();
+		return $entity->toArray();
+	}
+
+
+	#[RpcMethod('test.deleteTestTable', 'Удаление TestTable')]
+	public function delete(int $id): void
+	{
+		$this->useCase->delete($id);
+	}
+}

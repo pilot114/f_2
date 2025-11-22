@@ -1,0 +1,35 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Domain\Test\UseCase;
+
+use App\Domain\Test\Entity\TestTable;
+use Database\ORM\QueryRepositoryInterface;
+use Illuminate\Support\Enumerable;
+
+class QueryTestTableUseCase
+{
+	public function __construct(
+		/** @var QueryRepositoryInterface<TestTable> */
+		private QueryRepositoryInterface $repository,
+	) {
+	}
+
+
+	public function get(int $id): TestTable
+	{
+		return $this->repository->findOrFail($id, "Не найден TestTable");
+	}
+
+
+	/**
+	 * @return array{0: Enumerable<int, TestTable>, 1:int}
+	 */
+	public function find(array $params): array
+	{
+		$items = $this->repository->findBy($params, page: 1, perPage: 100);
+		$total = $this->repository->count($params);
+		return [$items, $total];
+	}
+}

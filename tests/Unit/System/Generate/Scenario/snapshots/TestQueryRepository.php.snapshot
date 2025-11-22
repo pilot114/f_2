@@ -1,0 +1,12 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Domain\Test\Repository;
+
+use Database\ORM\QueryRepository;
+use Illuminate\Support\Enumerable;
+
+class TestQueryRepository extends QueryRepository
+{
+}

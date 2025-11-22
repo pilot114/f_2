@@ -1,0 +1,18 @@
+services:
+    _defaults:
+        autowire: true
+        autoconfigure: true
+
+    OpenSpout\Writer\XLSX\Writer:
+        factory: ['@App\Domain\Portal\Excel\Factory\WriterFactory', 'create']
+        shared: false
+
+    App\Gateway\WriteExcelGateway: '@App\System\Excel\OpenSpoutExcelAdapter'
+
+    App\Common\Service\Excel\ExcelExportService:
+        arguments:
+            $exporterFactory: '@App\Domain\Portal\Excel\Factory\ExcelExporterFactory'
+
+    App\Domain\Portal\Excel\Factory\ExcelExporterFactory:
+        arguments:
+            $exporters: !tagged_iterator excel.exporter

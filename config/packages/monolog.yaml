@@ -1,0 +1,28 @@
+monolog:
+    channels:
+        - deprecation
+    handlers:
+        main:
+            type: stream
+            path: "%kernel.logs_dir%/%kernel.environment%.log"
+            level: notice
+            channels: ["!event"]
+
+when@prod:
+    monolog:
+        handlers:
+            main:
+                type: fingers_crossed
+                action_level: error
+                handler: nested
+                buffer_size: 50
+                channels: ["!event"]
+            nested:
+                type: stream
+                path: "%kernel.logs_dir%/%kernel.environment%.log"
+                level: debug
+            deprecation:
+                type: stream
+                path: "%kernel.logs_dir%/deprecation_%kernel.environment%.log"
+                channels: [deprecation]
+                formatter: monolog.formatter.json

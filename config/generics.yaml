@@ -1,0 +1,196 @@
+services:
+    _defaults:
+        autowire: true
+        autoconfigure: true
+    App\:
+        resource: '%kernel.project_dir%/src/'
+        exclude:
+            - '%kernel.project_dir%/src/Kernel.php'
+    QueryRepositoryKpiMetricGroup:
+        class: Database\ORM\QueryRepository
+        factory:
+            - '@App\System\Factory\RepositoryFactory'
+            - query
+        arguments:
+            $entityName: App\Domain\Finance\Kpi\Entity\KpiMetricGroup
+    QueryRepositoryKpiMetricType:
+        class: Database\ORM\QueryRepository
+        factory:
+            - '@App\System\Factory\RepositoryFactory'
+            - query
+        arguments:
+            $entityName: App\Domain\Finance\Kpi\Entity\KpiMetricType
+    QueryRepositoryPost:
+        class: Database\ORM\QueryRepository
+        factory:
+            - '@App\System\Factory\RepositoryFactory'
+            - query
+        arguments:
+            $entityName: App\Domain\Finance\Kpi\Entity\Post
+    QueryRepositoryCpDepartment:
+        class: Database\ORM\QueryRepository
+        factory:
+            - '@App\System\Factory\RepositoryFactory'
+            - query
+        arguments:
+            $entityName: App\Domain\Finance\Kpi\Entity\CpDepartment
+    CommandRepositoryKpiResponsible:
+        class: Database\ORM\CommandRepository
+        factory:
+            - '@App\System\Factory\RepositoryFactory'
+            - command
+        arguments:
+            $entityName: App\Domain\Finance\Kpi\Entity\KpiResponsible
+    QueryRepositoryFinEmployee:
+        class: Database\ORM\QueryRepository
+        factory:
+            - '@App\System\Factory\RepositoryFactory'
+            - query
+        arguments:
+            $entityName: App\Domain\Finance\Kpi\Entity\FinEmployee
+    QueryRepositoryDeputy:
+        class: Database\ORM\QueryRepository
+        factory:
+            - '@App\System\Factory\RepositoryFactory'
+            - query
+        arguments:
+            $entityName: App\Domain\Finance\Kpi\Entity\Deputy
+    CommandRepositoryAchievementEmployeeItem:
+        class: Database\ORM\CommandRepository
+        factory:
+            - '@App\System\Factory\RepositoryFactory'
+            - command
+        arguments:
+            $entityName: App\Domain\Hr\Achievements\Entity\AchievementEmployeeItem
+    QueryRepositoryImage:
+        class: Database\ORM\QueryRepository
+        factory:
+            - '@App\System\Factory\RepositoryFactory'
+            - query
+        arguments:
+            $entityName: App\Domain\Hr\Achievements\Entity\Image
+    QueryRepositoryColor:
+        class: Database\ORM\QueryRepository
+        factory:
+            - '@App\System\Factory\RepositoryFactory'
+            - query
+        arguments:
+            $entityName: App\Domain\Hr\Achievements\Entity\Color
+    CommandRepositoryCategory:
+        class: Database\ORM\CommandRepository
+        factory:
+            - '@App\System\Factory\RepositoryFactory'
+            - command
+        arguments:
+            $entityName: App\Domain\Hr\Achievements\Entity\Category
+    QueryRepositoryCategory:
+        class: Database\ORM\QueryRepository
+        factory:
+            - '@App\System\Factory\RepositoryFactory'
+            - query
+        arguments:
+            $entityName: App\Domain\Hr\Achievements\Entity\Category
+    CommandRepositoryAchievement:
+        class: Database\ORM\CommandRepository
+        factory:
+            - '@App\System\Factory\RepositoryFactory'
+            - command
+        arguments:
+            $entityName: App\Domain\Hr\Achievements\Entity\Achievement
+    QueryRepositoryPassword:
+        class: Database\ORM\QueryRepository
+        factory:
+            - '@App\System\Factory\RepositoryFactory'
+            - query
+        arguments:
+            $entityName: App\Domain\Portal\Cabinet\Entity\Password
+    QueryRepositoryGroup:
+        class: Database\ORM\QueryRepository
+        factory:
+            - '@App\System\Factory\RepositoryFactory'
+            - query
+        arguments:
+            $entityName: App\Domain\Events\Rewards\Entity\Group
+    QueryRepositoryRewardTypes:
+      class: Database\ORM\QueryRepository
+      factory:
+        - '@App\System\Factory\RepositoryFactory'
+        - query
+      arguments:
+        $entityName: App\Domain\Events\Rewards\Entity\RewardType
+    CommandRepositoryGroup:
+        class: Database\ORM\CommandRepository
+        factory:
+            - '@App\System\Factory\RepositoryFactory'
+            - command
+        arguments:
+            $entityName: App\Domain\Events\Rewards\Entity\Group
+    CommandRepositoryArtefact:
+        class: Database\ORM\CommandRepository
+        factory:
+            - '@App\System\Factory\RepositoryFactory'
+            - command
+        arguments:
+            $entityName: App\Domain\Analytics\Mcp\Entity\Artefact
+    App\Domain\Finance\Kpi\UseCase\WriteMetricUseCase:
+        arguments:
+            $readMetricGroup: '@QueryRepositoryKpiMetricGroup'
+            $readMetricType: '@QueryRepositoryKpiMetricType'
+            $readPost: '@QueryRepositoryPost'
+            $readDepartment: '@QueryRepositoryCpDepartment'
+    App\Domain\Finance\Kpi\UseCase\WriteResponsibleUseCase:
+        arguments:
+            $writeRepo: '@CommandRepositoryKpiResponsible'
+    App\Domain\Finance\Kpi\UseCase\SendToTreasuryUseCase:
+        arguments:
+            $finEmpRepo: '@QueryRepositoryFinEmployee'
+    App\Domain\Finance\Kpi\UseCase\WriteMetricTypeUseCase:
+        arguments:
+            $readMetricTypeRepo: '@QueryRepositoryKpiMetricType'
+    App\Domain\Finance\Kpi\UseCase\MultiUpdateUseCase:
+        arguments:
+            $finEmpRepo: '@QueryRepositoryFinEmployee'
+    App\Domain\Finance\Kpi\UseCase\WriteDeputyUseCase:
+        arguments:
+            $readRepo: '@QueryRepositoryDeputy'
+    App\Domain\Hr\Achievements\UseCase\EmployeeAchievementsUseCase:
+        arguments:
+            $writeRepository: '@CommandRepositoryAchievementEmployeeItem'
+    App\Domain\Hr\Achievements\UseCase\GetImagesUseCase:
+        arguments:
+            $repository: '@QueryRepositoryImage'
+    App\Domain\Hr\Achievements\UseCase\GetCategoriesColorsUseCase:
+        arguments:
+            $repository: '@QueryRepositoryColor'
+    App\Domain\Hr\Achievements\UseCase\CategoryWriteUseCase:
+        arguments:
+            $repository: '@CommandRepositoryCategory'
+            $readRepository: '@QueryRepositoryCategory'
+            $colorRepository: '@QueryRepositoryColor'
+    App\Domain\Hr\Achievements\UseCase\AchievementCardsWriteUseCase:
+        arguments:
+            $commandRepository: '@CommandRepositoryAchievement'
+            $imageRepository: '@QueryRepositoryImage'
+    App\Domain\Portal\Cabinet\UseCase\ChangePasswordUseCase:
+        arguments:
+            $read: '@QueryRepositoryPassword'
+    App\Domain\Events\Rewards\UseCase\RenameGroupUseCase:
+        arguments:
+            $read: '@QueryRepositoryGroup'
+            $write: '@CommandRepositoryGroup'
+    App\Domain\Events\Rewards\UseCase\CreateGroupUseCase:
+        arguments:
+            $readGroup: '@QueryRepositoryGroup'
+            $writeGroup: '@CommandRepositoryGroup'
+    App\Domain\Events\Rewards\UseCase\MoveProgramsToGroupUseCase:
+        arguments:
+            $readGroup: '@QueryRepositoryGroup'
+    App\Domain\Analytics\Mcp\Command\UpdateArtefactsCommand:
+        arguments:
+            $commandRepository: '@CommandRepositoryArtefact'
+    App\Domain\Events\Rewards\UseCase\GetAvailableRewardTypesUseCase:
+        arguments:
+            $readRewardTypes: '@QueryRepositoryRewardTypes'
+    App\Domain\Events\Rewards\UseCase\SetRewardTypeUseCase:
+        arguments:
+            $rewardTypeQueryRepository: '@QueryRepositoryRewardTypes'

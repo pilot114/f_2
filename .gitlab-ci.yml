@@ -1,0 +1,297 @@
+image: 192.168.6.29:5050/portal/back/php82:latest
+
+stages:
+  - validate commits
+  - composer
+  - syntax
+  - refactor
+  - code style
+  - static analyze
+  - test
+  - coverage check
+  - sonarqube-check
+  - release
+  - deploy
+
+check_commit_messages:
+  stage: validate commits
+  script:
+    - echo "Проверка сообщений коммитов..."
+    - |
+      if [ "$CI_PIPELINE_SOURCE" = "merge_request_event" ]; then
+        COMMIT_RANGE="origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME..HEAD"
+      else
+        COMMIT_RANGE="HEAD"
+      fi
+
+      git log --pretty=format:"%s" $COMMIT_RANGE | while IFS= read -r COMMIT_MESSAGE; do
+        echo $COMMIT_MESSAGE
+        if ! echo "$COMMIT_MESSAGE" | grep -qE '^(feat|fix|docs|style|refactor|perf|test)\([A-Z]+-[0-9]+\): .*|^(chore|build|ci|revert).*?: .*|Merge branch.*|Revert.*'; then
+          echo "❌ Ошибка: Сообщение коммита '$COMMIT_MESSAGE' не соответствует формату: feat(BP-132): сообщение"
+          exit 1
+        fi
+      done
+    - echo "✅ Все сообщения коммитов соответствуют формату!"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+
+composer:
+  stage: composer
+  script:
+    - rm /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini
+    - git config --global url."http://gitlab-ci-token:${CI_JOB_TOKEN}@192.168.6.29/".insteadOf "git@192.168.6.29:"
+    - php /var/www/html/composer.phar install --no-progress --no-interaction --ignore-platform-reqs
+  artifacts:
+    paths:
+      - "vendor"
+    when: always
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_REF_NAME == "develop"
+    - if: $CI_COMMIT_REF_NAME == "main"
+
+Syntax Lint:
+  stage: syntax
+  script:
+    - ./vendor/bin/parallel-lint --gitlab src > syntax_lint.json
+  artifacts:
+    paths:
+      - "syntax_lint.json"
+    when: always
+    reports:
+      codequality: "./syntax_lint.json"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_REF_NAME == "develop" && $RELEASE_TEST_TAG != null
+
+Rector:
+  stage: refactor
+  script:
+    - XDEBUG_MODE=off ./vendor/bin/rector process --dry-run
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_REF_NAME == "develop" && $RELEASE_TEST_TAG != null
+
+Ecs:
+  stage: code style
+  script:
+    - ./vendor/bin/ecs check --config ecs.php
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_REF_NAME == "develop" && $RELEASE_TEST_TAG != null
+
+PHPStan:
+  stage: static analyze
+  script:
+    - ./vendor/bin/phpstan analyse -c phpstan.dist.neon --memory-limit 512M --error-format gitlab > phpstan-report.json
+  artifacts:
+    paths:
+      - "phpstan-report.json"
+    when: always
+    reports:
+      codequality: "./phpstan-report.json"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_REF_NAME == "develop" && $RELEASE_TEST_TAG != null
+
+Unit Tests:
+  stage: test
+  before_script:
+    - docker-php-ext-enable pcov
+  script:
+    - php -dpcov.enabled=1 -dpcov.directory=./src -dpcov.exclude="~vendor~" ./vendor/bin/pest --parallel --compact tests/Unit --coverage --min=5 --log-junit pest-report.xml --coverage-cobertura pest-coverage.xml --coverage-clover pest-coverage-clover.xml --coverage-text --colors=never | tee coverage_output.txt
+    - |
+      COVERAGE=$(grep -A 10 "Summary:" coverage_output.txt | grep "Lines:" | head -1 | grep -oE '[0-9]+\.[0-9]+')
+      echo "Final Lines Coverage: ${COVERAGE}%"
+  artifacts:
+    untracked: true
+    when: always
+    paths:
+      - pest-coverage-clover.xml
+      - pest-coverage.xml
+      - pest-report.xml
+    reports:
+      junit: pest-report.xml
+      coverage_report:
+        coverage_format: cobertura
+        path: pest-coverage.xml
+  coverage: '/Final Lines Coverage: (\d+\.\d+)%/'
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_REF_NAME == "develop"
+    - if: $CI_COMMIT_REF_NAME == "main"
+
+Coverage Check:
+  stage: coverage check
+  dependencies:
+    - Unit Tests
+  before_script:
+    - apt-get update && apt-get install -y bc curl jq
+    - export GITLAB_TOKEN=${CI_ACCESS_KEY}
+  script:
+    - |
+      echo "=== Проверка покрытия с веткой develop ==="
+      # Получение текущего покрытия из clover XML
+      CURRENT_COVERAGE=$(php -r "
+      \$xml = simplexml_load_file('pest-coverage-clover.xml');
+      \$metrics = \$xml->project->metrics;
+      \$lines = (float)\$metrics['statements'];
+      \$covered = (float)\$metrics['coveredstatements'];
+      if (\$lines > 0) {
+          \$coverage = (\$covered / \$lines) * 100;
+          echo number_format(\$coverage, 2);
+      } else {
+          echo '0.00';
+      }
+      ")
+
+      echo "Текущее покрытие MR: ${CURRENT_COVERAGE}%"
+
+      echo "Получение покрытия из ветки develop..."
+      DEVELOP_PIPELINE=$(curl -sSf --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
+        "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/pipelines?ref=develop&status=success&per_page=1")
+
+      if [[ $(echo "$DEVELOP_PIPELINE" | jq -r 'type') != "array" ]]; then
+        echo "❌ Не удалось получить список pipeline'ов ветки $REF:"
+        echo "$DEVELOP_PIPELINE"
+        exit 1
+      fi
+
+      DEVELOP_PIPELINE_ID=$(echo "$DEVELOP_PIPELINE" | jq -r '.[0].id')
+
+      if [[ -z "$DEVELOP_PIPELINE_ID" || "$DEVELOP_PIPELINE_ID" == "null" ]]; then
+        echo "❌ КРИТИЧЕСКАЯ ОШИБКА: Не удалось найти ни одной успешной задачи 'Unit Tests' с отчетом о покрытии среди последних 50 задач в ветке develop."
+        echo "Возможные причины:"
+        echo "1. В ветке develop давно не запускались тесты."
+        echo "2. Задача с тестами называется не 'Unit Tests'."
+        echo "3. Задача не создает артефакт типа 'cobertura'."
+        exit 1
+      fi
+
+      JOBS_LIST_JSON=$(curl -sSf --header "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
+      "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/pipelines/${DEVELOP_PIPELINE_ID}/jobs")
+
+      # Можно потом найти нужную job, например, с именем "Unit Tests"
+      DEVELOP_COVERAGE=$(echo "$JOBS_LIST_JSON" | jq -r '.[] | select(.name == "Unit Tests") | .coverage')
+
+      if [[ -z "$DEVELOP_COVERAGE" || "$DEVELOP_COVERAGE" == "null" ]]; then
+          DEVELOP_COVERAGE=0
+      fi
+
+      echo "Покрытие в develop: $DEVELOP_COVERAGE%"
+
+      if (( $(echo "$CURRENT_COVERAGE < $DEVELOP_COVERAGE" | bc -l) )); then
+          echo "❌ Покрытие кода ($CURRENT_COVERAGE%) ниже, чем в ветке develop ($DEVELOP_COVERAGE%)."
+          exit 1
+      else
+          echo "✅ Покрытие кода ($CURRENT_COVERAGE%) не ниже, чем в ветке develop ($DEVELOP_COVERAGE%)."
+      fi
+
+      echo "Покрытие в develop: $DEVELOP_COVERAGE%"
+
+      # Проверка на снижение покрытия относительно develop
+      if [ "$DEVELOP_COVERAGE" != "0" ]; then
+        if (( $(echo "$CURRENT_COVERAGE < $DEVELOP_COVERAGE - $COVERAGE_DECLINE_THRESHOLD" | bc -l) )); then
+            echo "❌ Покрытие снижается относительно develop: ${CURRENT_COVERAGE}% < ${DEVELOP_COVERAGE}%"
+            echo "Разница: $(echo "$CURRENT_COVERAGE - $DEVELOP_COVERAGE" | bc -l)%"
+            exit 1
+        else
+            echo "✅ Покрытие не снижается относительно develop"
+            echo "Текущее: ${CURRENT_COVERAGE}%, Develop: ${DEVELOP_COVERAGE}%"
+        fi
+      else
+        echo "✅ Покрытие соответствует минимальному порогу: ${CURRENT_COVERAGE}%"
+      fi
+
+      echo "✅ Проверка покрытия успешно завершена"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_REF_NAME == "develop" && $RELEASE_TEST_TAG != null
+
+sonarqube-check:
+  stage: sonarqube-check
+  image: sonarsource/sonar-scanner-cli:11
+  dependencies:
+    - Unit Tests
+  script:
+    - sonar-scanner -X -Dsonar.host.url="http://${SONAR_HOST_URL}" -Dproject.settings=sonar-project.properties
+  allow_failure: true
+  rules:
+    - if: $CI_COMMIT_REF_NAME == "main" && $RELEASE_TEST_TAG == null
+
+release:
+  stage: release
+  before_script:
+    - eval $(ssh-agent -s)
+    - echo "$SSH_DEPLOY_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+    - echo "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+    - git config --global user.name "$CI_BOT_GIT_USER_NAME"
+    - git config --global user.email "$CI_BOT_GIT_USER_EMAIL"
+  script:
+    - |
+      git config http.sslVerify false
+      git checkout main && git pull origin main
+      php vendor/bin/conventional-changelog --no-change-without-commits --commit --no-verify
+    - |
+      CHANGELOG_COMMIT=$(git rev-parse HEAD)
+      COMMIT_MSG=$(git log -1 --pretty=%B $CHANGELOG_COMMIT)
+      git push --follow-tags -o ci.skip https://oauth2:$ACCESS_TOKEN@$CI_SERVER_HOST/$CI_PROJECT_PATH.git HEAD:main
+      git push -o ci.skip https://oauth2:$ACCESS_TOKEN@$CI_SERVER_HOST/$CI_PROJECT_PATH.git --tags
+    - |
+      git fetch origin develop
+      git checkout -B develop origin/develop
+    - |
+      git show $CHANGELOG_COMMIT:CHANGELOG.md > CHANGELOG.md
+      git add CHANGELOG.md
+      git commit -m "$COMMIT_MSG"
+    - git push -o ci.skip https://oauth2:$ACCESS_TOKEN@$CI_SERVER_HOST/$CI_PROJECT_PATH.git HEAD:develop
+  allow_failure: true
+  rules:
+    - if: $CI_COMMIT_REF_NAME == "main" && $RELEASE_TEST_TAG == null
+
+deploy:
+  stage: deploy
+  variables:
+    SENTRY_DSN: $SENTRY_DSN
+    APP_SECRET: $APP_SECRET
+    DB_USER: $DB_USER
+    DB_PASS: $DB_PASS
+    JWT_DEBUG: $JWT_DEBUG
+    FILE_CLIENT_URL: $FILE_CLIENT_URL
+    FILE_CLIENT_SECRET: $FILE_CLIENT_SECRET
+    JIRA_HOST: $JIRA_HOST
+    JIRA_USER: $JIRA_USER
+    JIRA_PASSWORD: $JIRA_PASSWORD
+  rules:
+    - if: $CI_COMMIT_BRANCH == 'develop' && $RELEASE_TEST_TAG == null
+      variables:
+        DEPLOY_HOST: 'beta'
+    - if: $CI_COMMIT_BRANCH == 'main' && $RELEASE_TEST_TAG == null
+      variables:
+        DEPLOY_HOST: 'prod'
+  before_script:
+    - eval $(ssh-agent -s)
+    - echo "$SSH_DEPLOY_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+    - echo "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+    - ssh-keyscan 192.168.6.29 >> ~/.ssh/known_hosts
+    - git config pull.rebase true
+    - git fetch --tags --force
+    - git checkout $CI_COMMIT_BRANCH
+    - git pull origin $CI_COMMIT_BRANCH
+    # optimize composer
+    - php /var/www/html/composer.phar install --no-progress --no-interaction --ignore-platform-reqs --no-dev
+    - php /var/www/html/composer.phar dump-autoload --classmap-authoritative  --optimize --no-dev
+  script:
+    - php ci.php $DEPLOY_HOST
+
+cache:
+  - key:
+      files:
+        - composer.lock
+    paths:
+      - vendor/
+    policy: pull-push

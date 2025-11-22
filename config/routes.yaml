@@ -1,0 +1,11 @@
+controllers:
+    resource:
+        path: ../src/Domain/Portal/Files/Controller/
+        namespace: App\Domain\Portal\Files\Controller
+    type: attribute
+
+excel_controllers:
+    resource:
+        path: ../src/Domain/Portal/Excel/Controller/
+        namespace: App\Domain\Portal\Excel\Controller
+    type: attribute

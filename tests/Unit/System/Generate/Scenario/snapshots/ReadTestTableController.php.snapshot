@@ -1,0 +1,35 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Domain\Test\Controller;
+
+use App\Common\Attribute\RpcMethod;
+use App\Domain\Test\UseCase\QueryTestTableUseCase;
+
+class ReadTestTableController
+{
+	public function __construct(
+		private QueryTestTableUseCase $useCase,
+	) {
+	}
+
+
+	#[RpcMethod('test.getTestTable', 'Получение TestTable по id')]
+	public function get(int $id): array
+	{
+		return $this->useCase->get($id)->toArray();
+	}
+
+
+	#[RpcMethod('test.findTestTable', 'Поиск TestTable')]
+	public function find(): array
+	{
+		$params = [];
+		[$items, $total] = $this->useCase->find($params);
+		return [
+		'items' => $items->toArray(),
+		'total' => $total,
+		];
+	}
+}

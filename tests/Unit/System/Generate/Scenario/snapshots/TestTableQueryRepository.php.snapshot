@@ -1,0 +1,29 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Domain\Test\Repository;
+
+use App\Domain\Test\Entity\TestTable;
+use Database\ORM\QueryRepository;
+use Illuminate\Support\Enumerable;
+
+/**
+ * @extends QueryRepository<TestTable>
+ */
+class TestTableQueryRepository extends QueryRepository
+{
+	protected string $entityName = TestTable::class;
+
+
+	/**
+	 * @return Enumerable<int, TestTable>
+	 */
+	public function customFind(): Enumerable
+	{
+		$sql = <<<SQL
+		SELECT * FROM $table->name
+		SQL;
+		return $this->query($sql);
+	}
+}
